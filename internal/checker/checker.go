@@ -1,13 +1,15 @@
 package checker
 
 import (
+	"context"
 	"cscheck/pkg/shell"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/alexliesenfeld/health"
 	"github.com/sirupsen/logrus"
-	"github.com/wojas/go-healthz"
 )
 
 const (
@@ -44,7 +46,7 @@ func New(
 	}
 }
 
-func (t Teamserver) Check() error {
+func (t Teamserver) Check(ctx context.Context) error {
 	out, err := shell.New(
 		"/bin/sh",
 		"agscript",
@@ -56,7 +58,11 @@ func (t Teamserver) Check() error {
 	).WithDir(t.dir).Run()
 	if err != nil {
 		logrus.Warnf("agscript server error: %s", err)
-		return healthz.Warn(StatusDown)
+		return fmt.Errorf(StatusDown)
+	}
+	if !strings.Contains(out, "Hello World") {
+		logrus.Warnf("agscript server error: %s", out)
+		return fmt.Errorf(StatusDown)
 	}
 
 	logrus.Infof("agscript server: %s", out)
@@ -65,20 +71,14 @@ func (t Teamserver) Check() error {
 
 func (t *Teamserver) Start() error {
 	logrus.WithField("address", t.bind).Info("HTTP stats server enabled")
-	healthz.Register("teamserver", time.Second*5, t.Check)
-	http.Handle("/healthz", healthz.Handler())
+	checker := health.NewChecker(
+		health.WithCacheDuration(1*time.Second),
+		health.WithTimeout(10*time.Second),
+		health.WithPeriodicCheck(10*time.Second, 3*time.Second, health.Check{
+			Name:  "teamserver",
+			Check: t.Check,
+		}),
+	)
+	http.Handle("/healthz", health.NewHandler(checker))
 	return http.ListenAndServe(t.bind, nil)
 }
-
-// func Start(a string, t *Teamserver) {
-
-// 	if a == "" {
-// 		logrus.Info("HTTP stats server disabled")
-// 		return
-// 	}
-// 	logrus.WithField("address", a).Info("HTTP stats server enabled")
-// 	healthz.Register("teamserver", time.Second*5, t.Check)
-// 	http.Handle("/healthz", healthz.Handler())
-// 	err := http.ListenAndServe(a, nil)
-// 	logrus.Fatalf("HTTP server error: %v", err)
-// }
