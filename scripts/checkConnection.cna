@@ -1,0 +1,4 @@
+on ready {
+    println("Hello World! I am synchronized!");
+    closeClient();
+}
