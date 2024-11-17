@@ -2,13 +2,16 @@ package checker
 
 import (
 	"context"
+	"cscheck/internal/metrics"
 	"cscheck/pkg/shell"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/alexliesenfeld/health"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 )
 
@@ -65,7 +68,36 @@ func (t Teamserver) Check(ctx context.Context) error {
 		return fmt.Errorf(StatusDown)
 	}
 
-	logrus.Infof("agscript server: %s", out)
+	logrus.Infof("agscript server: %s", "Teamserver is up")
+	return nil
+}
+
+func (t Teamserver) GetListeners(
+	script string,
+	teamserverListenersTotal *metrics.GaugeMetrics,
+	teamserverListeners *metrics.GaugeVecMetrics,
+) error {
+	out, err := shell.New(
+		"/bin/sh",
+		"agscript",
+		t.address,
+		fmt.Sprint(t.port),
+		"exporter",
+		t.password,
+		script,
+	).WithDir(t.dir).Run()
+	if err != nil {
+		logrus.Warnf("agscript server error: %s", err)
+		return fmt.Errorf(StatusDown)
+	}
+	logrus.Infof("Current listeners: %s", fmt.Sprint(strings.Count(out, "Listener:")))
+	re, _ := regexp.Compile("== Listener: (.*) ==")
+	matches := re.FindAllStringSubmatch(out, -1)
+	teamserverListeners.Metrics.Reset()
+	for _, match := range matches {
+		teamserverListeners.Metrics.WithLabelValues(match[1]).Set(1)
+	}
+	teamserverListenersTotal.Metrics.Set(float64(strings.Count(out, "Listener:")))
 	return nil
 }
 
@@ -79,6 +111,22 @@ func (t *Teamserver) Start() error {
 			Check: t.Check,
 		}),
 	)
+
+	teamserverListenersTotal := metrics.NewGaugeMetrics("teamserver_listeners_total", "Cobalt Strike listeners total count.")
+	teamserverListeners := metrics.NewGaugeVecMetrics("teamserver_listener", "Cobalt Strike listener.")
+
+	go func() {
+		for {
+			t.GetListeners(
+				"checkListeners.cna",
+				teamserverListenersTotal,
+				teamserverListeners,
+			)
+			time.Sleep(10 * time.Second)
+		}
+	}()
+
+	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/healthz", health.NewHandler(checker))
 	return http.ListenAndServe(t.bind, nil)
 }
