@@ -29,6 +29,40 @@ The `cscheck` listens on HTTP port 8000 by default. See the `--help` output for 
 * Docker on local machine
 * golang compiler
 * Make
+### Build binary
+1. Clone repo.
+```bash
+git clone https://github.com/3ayazaya/cscheck
+cd cscheck
+```
+
+2. Build `cscheck`.
+
+```bash
+go build -o cscheck cmd/cscheck/main.go
+```
+
+3. Run `cscheck`.
+
+```bash
+./cscheck \
+    -password changeme \
+    -ip 192.168.20.150 \
+    -port 50050 \
+    -user checker \
+    -bind 0.0.0.0:8000
+```
+
+4. Check `csckeck` status.
+
+```bash
+curl -v http://127.0.0.1/healthz
+```
+Prometheus exporter metrics.
+```bash
+curl -v http://127.0.0.1/metrics
+```
+
 ### Build Docker image
 1. Clone repo.
 ```bash
@@ -42,7 +76,7 @@ cd cscheck
 make build-image
 ```
 
-3. Run Docker image
+3. Run Docker image.
 
 ```bash
 docker run --rm -it \
