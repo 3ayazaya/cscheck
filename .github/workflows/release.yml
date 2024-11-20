@@ -24,7 +24,7 @@ jobs:
             goos: ${{ matrix.goos }}
             goarch: ${{ matrix.goarch }}
             goversion: "https://dl.google.com/go/go1.23.0.linux-amd64.tar.gz"
-            build_command: "make"
+            build_command: "make build"
             build_flags: "build"
             binary_name: "cscheck"
             extra_files: README.md cscheck scripts
