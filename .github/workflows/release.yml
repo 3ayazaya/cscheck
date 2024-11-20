@@ -27,4 +27,4 @@ jobs:
             build_command: "make"
             build_flags: "build"
             binary_name: "cscheck"
-            extra_files: README.md cscheck
+            extra_files: README.md cscheck scripts
