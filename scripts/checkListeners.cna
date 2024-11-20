@@ -1,0 +1,10 @@
+on ready {
+    local('$name $key $value');
+    foreach $name (listeners()) {
+      println("== Listener: $name == ");
+      foreach $key => $value (listener_info($name)) {
+         println("$[20]key : $value");
+      }
+   }
+    closeClient();
+}
