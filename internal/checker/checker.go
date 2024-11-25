@@ -3,6 +3,7 @@ package checker
 import (
 	"context"
 	"cscheck/internal/metrics"
+	"cscheck/pkg/consul"
 	"cscheck/pkg/shell"
 	"fmt"
 	"net/http"
@@ -20,13 +21,14 @@ const (
 )
 
 type Teamserver struct {
-	address  string
-	port     uint
-	user     string
-	password string
-	script   string
-	dir      string
-	bind     string
+	address      string
+	port         uint
+	user         string
+	password     string
+	script       string
+	dir          string
+	bind         string
+	consulClient *consul.ConsulClient
 }
 
 func New(
@@ -38,14 +40,19 @@ func New(
 	dir string,
 	bind string,
 ) *Teamserver {
+	consulClient, err := consul.NewConsulClient("cobalt-strike", "cs01", address, int(port), strings.Split(bind, ":")[1])
+	if err != nil {
+		logrus.Warnf("Failed to create Consul client: %s", err)
+	}
 	return &Teamserver{
-		address:  address,
-		port:     port,
-		user:     user,
-		password: password,
-		script:   script,
-		dir:      dir,
-		bind:     bind,
+		address:      address,
+		port:         port,
+		user:         user,
+		password:     password,
+		script:       script,
+		dir:          dir,
+		bind:         bind,
+		consulClient: consulClient,
 	}
 }
 
@@ -60,14 +67,26 @@ func (t Teamserver) Check(ctx context.Context) error {
 		t.script,
 	).WithDir(t.dir).Run()
 	if err != nil {
+		deregErr := t.consulClient.Deregister()
+		if deregErr != nil {
+			logrus.Warnf("Deregistering service error: %s", deregErr)
+		}
 		logrus.Warnf("agscript server error: %s", err)
 		return fmt.Errorf(StatusDown)
 	}
 	if !strings.Contains(out, "Hello World") {
+		deregErr := t.consulClient.Deregister()
+		if deregErr != nil {
+			logrus.Warnf("Deregistering service error: %s", deregErr)
+		}
 		logrus.Warnf("agscript server error: %s", out)
 		return fmt.Errorf(StatusDown)
 	}
 
+	regErr := t.consulClient.Register()
+	if regErr != nil {
+		logrus.Warnf("Registering service error: %s", regErr)
+	}
 	logrus.Infof("agscript server: %s", "Teamserver is up")
 	return nil
 }
